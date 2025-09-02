@@ -153,5 +153,5 @@ def lambda_handler(event, context):
     # --- Step 5: Return a Success Response ---
     return {
         'statusCode': 200,
-        'body': {'message': 'Tender data processed and sent to SQS queue.'}
+        'body': json.dumps({'message': 'Tender data processed and sent to SQS queue.'})
     }
