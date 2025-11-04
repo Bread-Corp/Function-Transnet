@@ -146,16 +146,366 @@ Ready to hop aboard Transnet's logistics express? Let's get your freight moving!
 
 ## 📦 Deployment
 
-### 🚀 Express Delivery Deploy
-1. **📁 Package**: Containerize your code and dependencies
-2. **⬆️ Upload**: Deploy to AWS Lambda with freight-grade settings
-3. **⚙️ Configure**: Set up CloudWatch Events for scheduled cargo runs
-4. **🎯 Test**: Trigger manually to verify logistics connection
+This section covers three deployment methods for the Transnet Tender Processing Lambda Service. Choose the method that best fits your workflow and infrastructure preferences.
 
-### 🔧 Environment Variables
-- `SQS_QUEUE_URL`: Target queue for processed logistics tenders
-- `API_TIMEOUT`: Request timeout for Transnet API calls
-- `BATCH_SIZE`: Number of tenders per SQS shipment (default: 10)
+### 🛠️ Prerequisites
+
+Before deploying, ensure you have:
+- AWS CLI configured with appropriate credentials 🔑
+- AWS SAM CLI installed (`pip install aws-sam-cli`)
+- Python 3.13 runtime support in your target region
+- Access to AWS Lambda, SQS, and CloudWatch Logs services ☁️
+- Required Python dependency: `requests`
+
+### 🎯 Method 1: AWS Toolkit Deployment
+
+Deploy directly through your IDE using the AWS Toolkit extension.
+
+#### Setup Steps:
+1. **Install AWS Toolkit** in your IDE (VS Code, IntelliJ, etc.)
+2. **Configure AWS Profile** with your credentials
+3. **Open Project** containing `lambda_function.py` and `models.py`
+
+#### Deploy Process:
+1. **Right-click** on `lambda_function.py` in your IDE
+2. **Select** "Deploy Lambda Function" from AWS Toolkit menu
+3. **Configure Deployment**:
+   - Function Name: `TransnetLambda`
+   - Runtime: `python3.13`
+   - Handler: `lambda_function.lambda_handler`
+   - Memory: `128 MB`
+   - Timeout: `120 seconds`
+4. **Add Layers** manually after deployment:
+   - requests-library layer
+5. **Set Environment Variables**:
+   ```
+   SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo
+   API_TIMEOUT=30
+   BATCH_SIZE=10
+   ```
+6. **Configure IAM Permissions** for SQS, CloudWatch Logs, and EC2 (for VPC if needed)
+
+#### Post-Deployment:
+- Test the function using the AWS Toolkit test feature
+- Monitor logs through CloudWatch integration
+- Update function code directly from IDE for quick iterations
+
+### 🚀 Method 2: SAM Deployment
+
+Use AWS SAM for infrastructure-as-code deployment with the provided template.
+
+#### Initial Setup:
+```bash
+# Install AWS SAM CLI
+pip install aws-sam-cli
+
+# Verify installation
+sam --version
+```
+
+#### Create Required Layer Directory:
+Since the template references a layer not included in the repository, create it:
+
+```bash
+# Create layer directory
+mkdir -p requests-library/python
+
+# Install requests layer
+pip install requests -t requests-library/python/
+```
+
+#### Build and Deploy:
+```bash
+# Build the SAM application
+sam build
+
+# Deploy with guided configuration (first time)
+sam deploy --guided
+
+# Follow the prompts:
+# Stack Name: transnet-lambda-stack
+# AWS Region: us-east-1 (or your preferred region)
+# Parameter SQSQueueURL: https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo
+# Parameter APITimeout: 30
+# Parameter BatchSize: 10
+# Confirm changes before deploy: Y
+# Allow SAM to create IAM roles: Y
+# Save parameters to samconfig.toml: Y
+```
+
+#### Environment Variables Setup:
+Add these parameters to your SAM template or set them after deployment:
+
+```yaml
+# Add to template.yml under TransnetLambda Properties
+Environment:
+  Variables:
+    SQS_QUEUE_URL: https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo
+    API_TIMEOUT: "30"
+    BATCH_SIZE: "10"
+```
+
+#### Subsequent Deployments:
+```bash
+# Quick deployment after initial setup
+sam build && sam deploy
+```
+
+#### Local Testing with SAM:
+```bash
+# Test function locally with environment variables
+sam local invoke TransnetLambda --env-vars env.json
+
+# Create env.json file:
+echo '{
+  "TransnetLambda": {
+    "SQS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo",
+    "API_TIMEOUT": "30",
+    "BATCH_SIZE": "10"
+  }
+}' > env.json
+```
+
+#### SAM Deployment Advantages:
+- ✅ Complete infrastructure management
+- ✅ Automatic layer creation and management
+- ✅ IAM permissions defined in template
+- ✅ Easy rollback capabilities
+- ✅ CloudFormation integration
+
+### 🔄 Method 3: Workflow Deployment (CI/CD)
+
+Automated deployment using GitHub Actions workflow for production environments.
+
+#### Setup Requirements:
+1. **GitHub Repository Secrets**:
+   ```
+   AWS_ACCESS_KEY_ID: Your AWS access key
+   AWS_SECRET_ACCESS_KEY: Your AWS secret key
+   AWS_REGION: us-east-1 (or your target region)
+   ```
+
+2. **Pre-existing Lambda Function**: The workflow updates an existing function, so deploy initially using Method 1 or 2.
+
+#### Deployment Process:
+1. **Create Release Branch**:
+   ```bash
+   # Create and switch to release branch
+   git checkout -b release
+   
+   # Make your changes to lambda_function.py or models.py
+   # Commit changes
+   git add .
+   git commit -m "feat: update Transnet logistics processing logic"
+   
+   # Push to trigger deployment
+   git push origin release
+   ```
+
+2. **Automatic Deployment**: The workflow will:
+   - Checkout the code
+   - Configure AWS credentials
+   - Create deployment zip with `lambda_function.py` and `models.py`
+   - Update the existing Lambda function code
+   - Maintain existing configuration (layers, environment variables, etc.)
+
+#### Manual Trigger:
+You can also trigger deployment manually:
+1. Go to **Actions** tab in your GitHub repository
+2. Select **"Deploy Python Scraper to AWS"** workflow
+3. Click **"Run workflow"**
+4. Choose the `release` branch
+5. Click **"Run workflow"** button
+
+#### Workflow Deployment Advantages:
+- ✅ Automated CI/CD pipeline
+- ✅ Consistent deployment process
+- ✅ Audit trail of deployments
+- ✅ Easy rollback to previous commits
+- ✅ No local environment dependencies
+
+### 🔧 Post-Deployment Configuration
+
+Regardless of deployment method, configure the following:
+
+#### Environment Variables:
+Set these environment variables in your Lambda function:
+
+```bash
+SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo
+API_TIMEOUT=30
+BATCH_SIZE=10
+USER_AGENT=Mozilla/5.0 (compatible; Transnet-Logistics-Bot/1.0)
+```
+
+#### Via AWS CLI:
+```bash
+aws lambda update-function-configuration \
+    --function-name TransnetLambda \
+    --environment Variables='{
+        "SQS_QUEUE_URL":"https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo",
+        "API_TIMEOUT":"30",
+        "BATCH_SIZE":"10",
+        "USER_AGENT":"Mozilla/5.0 (compatible; Transnet-Logistics-Bot/1.0)"
+    }'
+```
+
+#### CloudWatch Events (Optional):
+Set up scheduled execution:
+```bash
+# Create CloudWatch Events rule for daily execution
+aws events put-rule \
+    --name "TransnetLambdaSchedule" \
+    --schedule-expression "cron(0 9 * * ? *)" \
+    --description "Daily Transnet logistics tender scraping"
+
+# Add Lambda as target
+aws events put-targets \
+    --rule "TransnetLambdaSchedule" \
+    --targets "Id"="1","Arn"="arn:aws:lambda:us-east-1:211635102441:function:TransnetLambda"
+```
+
+### 🧪 Testing Your Deployment
+
+After deployment, test the function:
+
+```bash
+# Test via AWS CLI
+aws lambda invoke \
+    --function-name TransnetLambda \
+    --payload '{}' \
+    response.json
+
+# Check the response
+cat response.json
+```
+
+#### Expected Success Indicators:
+- ✅ Function executes without errors
+- ✅ CloudWatch logs show successful API calls to Transnet eTenders
+- ✅ SQS queue receives tender messages with proper logistics data
+- ✅ No timeout or memory errors
+- ✅ Valid JSON tender data in queue messages
+- ✅ MessageGroupId set to "TransnetTenderScrape"
+- ✅ Proper date parsing for Transnet's MM/DD/YYYY format
+
+### 🔍 Monitoring and Maintenance
+
+#### CloudWatch Metrics to Monitor:
+- **Duration**: Function execution time (watch for large infrastructure project processing)
+- **Error Rate**: Failed invocations
+- **Memory Utilization**: RAM usage patterns during batch processing
+- **Throttles**: Concurrent execution limits
+
+#### Log Analysis:
+```bash
+# View recent logs
+aws logs tail /aws/lambda/TransnetLambda --follow
+
+# Search for errors
+aws logs filter-log-events \
+    --log-group-name /aws/lambda/TransnetLambda \
+    --filter-pattern "ERROR"
+
+# Search for successful batch deliveries
+aws logs filter-log-events \
+    --log-group-name /aws/lambda/TransnetLambda \
+    --filter-pattern "Successfully sent batch"
+
+# Monitor Transnet-specific patterns
+aws logs filter-log-events \
+    --log-group-name /aws/lambda/TransnetLambda \
+    --filter-pattern "TransnetTenderScrape"
+```
+
+### 🚨 Troubleshooting Deployments
+
+<details>
+<summary><strong>Layer Dependencies Missing</strong></summary>
+
+**Issue**: `requests` import errors
+
+**Solution**: Ensure the requests layer is properly created and attached:
+```bash
+# For SAM: Verify layer directory exists and contains packages
+ls -la requests-library/python/
+
+# Check for requests module
+ls -la requests-library/python/requests/
+
+# For manual deployment: Create and upload layer separately
+```
+</details>
+
+<details>
+<summary><strong>Environment Variables Not Set</strong></summary>
+
+**Issue**: Missing SQS_QUEUE_URL, API_TIMEOUT, or BATCH_SIZE configuration
+
+**Solution**: Set environment variables using AWS CLI or console:
+```bash
+aws lambda update-function-configuration \
+    --function-name TransnetLambda \
+    --environment Variables='{
+        "SQS_QUEUE_URL":"https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo",
+        "API_TIMEOUT":"30",
+        "BATCH_SIZE":"10"
+    }'
+```
+</details>
+
+<details>
+<summary><strong>IAM Permission Errors</strong></summary>
+
+**Issue**: Access denied for SQS or CloudWatch operations
+
+**Solution**: Verify the Lambda execution role has required permissions:
+- `sqs:SendMessage`
+- `sqs:GetQueueUrl` 
+- `sqs:GetQueueAttributes`
+- `logs:CreateLogGroup`
+- `logs:CreateLogStream`
+- `logs:PutLogEvents`
+- `ec2:CreateNetworkInterface`
+- `ec2:DeleteNetworkInterface`
+- `ec2:DescribeNetworkInterfaces`
+</details>
+
+<details>
+<summary><strong>Workflow Deployment Fails</strong></summary>
+
+**Issue**: GitHub Actions workflow errors
+
+**Solution**: Check repository secrets are correctly configured and the target Lambda function exists in AWS. Verify the function ARN matches the workflow configuration.
+</details>
+
+<details>
+<summary><strong>Transnet API Connection Issues</strong></summary>
+
+**Issue**: Cannot connect to Transnet eTenders API
+
+**Solution**: 
+- Verify the API endpoint is accessible
+- Check if Transnet's systems are experiencing maintenance
+- Consider increasing the API_TIMEOUT environment variable
+- Monitor for peak hour traffic delays
+</details>
+
+<details>
+<summary><strong>Date Parsing Failures</strong></summary>
+
+**Issue**: Transnet's MM/DD/YYYY date format causing validation errors
+
+**Solution**: Ensure your date parsing logic properly handles Transnet's specific date format:
+```python
+# Example date handling for Transnet format
+from datetime import datetime
+date_str = "10/07/2025 07:53:26 PM"
+parsed_date = datetime.strptime(date_str, "%m/%d/%Y %I:%M:%S %p")
+```
+</details>
+
+Choose the deployment method that best fits your development workflow and infrastructure requirements. SAM deployment is recommended for development environments, while workflow deployment excels for production CI/CD pipelines handling large-scale logistics data.
 
 ## 🧰 Troubleshooting
 
